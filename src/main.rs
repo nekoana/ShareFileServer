@@ -1,8 +1,8 @@
 use std::path::PathBuf;
 use std::{env, fs};
 
-use axum::extract::{FromRequestParts, OriginalUri, Path, State};
-use axum::http::{Request, Uri};
+use axum::extract::{OriginalUri, State};
+use axum::http::{Uri};
 use axum::response::Html;
 use axum::Router;
 use axum::{response::IntoResponse, routing::get};
@@ -68,13 +68,13 @@ async fn start_server(path: &str, port: u16) -> std::io::Result<()> {
 }
 
 async fn root_handler(
-    State(shared_path): State<String>,
+    State(base_path): State<String>,
     OriginalUri(uri): OriginalUri,
 ) -> impl IntoResponse {
-    let path = uri.path().trim_start_matches('/');
+    let sub_path = uri.path().trim_start_matches('/');
 
-    let mut full_path = PathBuf::from(&shared_path);
-    full_path.push(path);
+    let mut full_path = PathBuf::from(&base_path);
+    full_path.push(sub_path);
 
     debug!("full_path: {:?} ", full_path);
 
@@ -87,10 +87,10 @@ async fn root_handler(
             for file in files {
                 let uri = match &file {
                     FileOrDir::File(file) => Uri::builder()
-                        .path_and_query(format!("/static/{path}/{}", file))
+                        .path_and_query(format!("/static/{sub_path}/{}", file))
                         .build(),
                     FileOrDir::Dir(file) => Uri::builder()
-                        .path_and_query(format!("{path}/{}", file))
+                        .path_and_query(format!("/{sub_path}/{}", file))
                         .build(),
                 };
 
