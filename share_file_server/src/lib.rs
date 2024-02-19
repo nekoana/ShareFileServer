@@ -1,56 +1,40 @@
-use std::path::PathBuf;
-use std::{env, fs};
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
-use axum::extract::{OriginalUri, State};
-use axum::http::{Uri};
-use axum::response::Html;
-use axum::Router;
-use axum::{response::IntoResponse, routing::get};
+use axum::{
+    extract::{OriginalUri, State},
+    http::Uri,
+    response::{Html, IntoResponse},
+    routing::get,
+    Router,
+};
 use tokio::net::TcpListener;
-use tower_http::services::ServeDir;
-use tower_http::trace::TraceLayer;
+use tower_http::{services::ServeDir, trace::TraceLayer};
 use tracing::debug;
-use tracing_subscriber::layer::SubscriberExt;
-use tracing_subscriber::util::SubscriberInitExt;
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-#[tokio::main]
-async fn main() -> std::io::Result<()> {
-    let args = env::args().collect::<Vec<String>>();
-
-    if args.len() < 3 {
-        println!("Usage: {} <port> <path> ", args[0]);
-    } else {
-        let path = args[2].as_str();
-
-        let metadata = fs::metadata(path)?;
-        if !metadata.is_dir() {
-            panic!("path is not a directory");
-        }
-
-        println!("port:{} path: {}", args[1], args[2]);
-
-        let port = args[1].parse::<u16>().expect("port must be a number");
-
-        start_server(path, port).await?;
-    }
-
-    Ok(())
-}
-
-async fn start_server(path: &str, port: u16) -> std::io::Result<()> {
+pub async fn start_server(path: impl AsRef<Path>, port: u16) -> std::io::Result<()> {
     tracing_subscriber::registry()
         .with(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "ShareFileServer=debug,tower_http=debug".into()),
+                .unwrap_or_else(|_| "share_file_server=debug,tower_http=debug".into()),
         )
         .with(tracing_subscriber::fmt::layer())
         .init();
 
-    let shard_path = path.to_string();
+    let path = path
+        .as_ref()
+        .canonicalize()
+        .expect("not available path")
+        .to_string_lossy()
+        .to_string();
+
     let app = Router::new()
         .route("/", get(root_handler))
         .fallback(get(root_handler))
-        .with_state(shard_path)
+        .with_state(path.clone())
         .nest_service("/static", ServeDir::new(path))
         .layer(TraceLayer::new_for_http());
 
@@ -73,7 +57,7 @@ async fn root_handler(
 ) -> impl IntoResponse {
     let sub_path = uri.path().trim_start_matches('/');
 
-    let mut full_path = PathBuf::from(&base_path);
+    let mut full_path = PathBuf::from(base_path);
     full_path.push(sub_path);
 
     debug!("full_path: {:?} ", full_path);
@@ -85,22 +69,32 @@ async fn root_handler(
     match files {
         Ok(files) => {
             for file in files {
-                let uri = match &file {
-                    FileOrDir::File(file) => Uri::builder()
-                        .path_and_query(format!("/static/{sub_path}/{}", file))
-                        .build(),
-                    FileOrDir::Dir(file) => Uri::builder()
-                        .path_and_query(format!("/{sub_path}/{}", file))
-                        .build(),
+                let mut href = String::new();
+                match &file {
+                    FileOrDir::File(file) => {
+                        href.push_str("/static/");
+                        if !sub_path.is_empty() {
+                            href.push_str(sub_path);
+                            href.push_str("/");
+                        }
+                        href.push_str(file);
+                    }
+                    FileOrDir::Dir(file) => {
+                        href.push_str("/");
+                        if !sub_path.is_empty() {
+                            href.push_str(sub_path);
+                            href.push_str("/");
+                        }
+                        href.push_str(file);
+                        href.push_str("/");
+                    }
                 };
 
-                if let Ok(uri) = uri {
-                    file_list.push_str(&format!(
-                        "<li><a href='{}'>{}</a></li>",
-                        uri.path(),
-                        file.to_string()
-                    ));
-                }
+                file_list.push_str(&format!(
+                    "<li><a href='{}'>{}</a></li>",
+                    href,
+                    file.to_string()
+                ));
             }
         }
         Err(e) => {
