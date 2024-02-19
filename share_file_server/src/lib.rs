@@ -86,7 +86,6 @@ async fn root_handler(
                             href.push_str("/");
                         }
                         href.push_str(file);
-                        href.push_str("/");
                     }
                 };
 
