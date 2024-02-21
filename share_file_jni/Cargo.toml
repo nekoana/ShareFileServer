@@ -3,6 +3,12 @@ name = "share_file_jni"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+crate-type = ["cdylib"]
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+share_file_server = {path = "../share_file_server"}
+tokio = {version = "1.35.1",features = ["full"]}
+jni = "0.21.1"
