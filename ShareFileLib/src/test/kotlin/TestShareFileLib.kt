@@ -7,11 +7,10 @@ class TestShareFileLib {
 
     @Test
     fun testLoadLib() {
-        val shareFileLib = ShareFileLib()
+        println(System.getProperty("user.dir"))
+        val shareFileLib = ShareFileLib(8080,"../")
 
-        val isStart = shareFileLib.startServer(8080, "../")
-
-        println("isStart: $isStart")
+        assert(shareFileLib.startServer())
 
         Thread.sleep(1000 * 20)
 
