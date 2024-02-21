@@ -1,14 +1,7 @@
-use std::{
-    path::{Path, PathBuf},
-    sync::Arc,
-};
+use std::path::{Path, PathBuf};
 
 use axum::{
-    extract::{OriginalUri, State},
-    http::Uri,
-    response::{Html, IntoResponse},
-    routing::get,
-    Router,
+    extract::{OriginalUri, State}, response::{Html, IntoResponse}, routing::get, Router
 };
 use tokio::net::TcpListener;
 use tower_http::{services::ServeDir, trace::TraceLayer};
