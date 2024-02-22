@@ -43,6 +43,7 @@ class ShareFileLib(private val port: Int, private val path: String) {
     fun stopServer() {
         if (shareFileLibPtr != -1L) {
             stopServer(shareFileLibPtr)
+            shareFileLibPtr = -1
         }
     }
 
