@@ -21,7 +21,9 @@ async fn main() -> std::io::Result<()> {
 
         let port = args[1].parse::<u16>().expect("port must be a number");
 
-        start_server(path, port).await?;
+        start_server(path, port,async {
+            tokio::signal::ctrl_c().await.expect("failed to install CTRL+C signal handler");
+        }).await?;
     }
 
     Ok(())

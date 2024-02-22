@@ -6,9 +6,11 @@ import kotlin.io.path.createParentDirectories
 
 
 private const val LIB_NAME = "share_file_jni"
-private const val LIB_PATH = "lib"
+private const val LIB_PATH = "libs"
 
 class ShareFileLib(private val port: Int, private val path: String) {
+    private var shareFileLibPtr: Long = -1
+
     private val osName = System.getProperty("os.name")
 
     private val isWin = osName.startsWith("Windows", true)
@@ -31,13 +33,20 @@ class ShareFileLib(private val port: Int, private val path: String) {
     }
 
     fun startServer(): Boolean {
-        return startServer(port, path)
+        shareFileLibPtr = startServer(port, path)
+        return shareFileLibPtr != -1L
     }
 
 
-    private external fun startServer(port: Int, path: String): Boolean
+    private external fun startServer(port: Int, path: String): Long
 
-    external fun stopServer()
+    fun stopServer() {
+        if (shareFileLibPtr != -1L) {
+            stopServer(shareFileLibPtr)
+        }
+    }
+
+    private external fun stopServer(ptr: Long)
 
     private fun isLibExist(): Boolean {
         return Files.exists(Paths.get(workingDir, LIB_PATH, libName))

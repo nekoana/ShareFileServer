@@ -1,12 +1,15 @@
-
 use std::sync::OnceLock;
 
 use jni::objects::{JClass, JObject, JString};
-use jni::sys::{jboolean, jint, JNI_FALSE, JNI_TRUE};
+use jni::sys::{jint, jlong};
 use jni::JNIEnv;
+use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
 
-static mut HANDLER: Option<JoinHandle<()>> = None;
+struct ShareFileLib {
+    handler: JoinHandle<()>,
+    tx: oneshot::Sender<()>,
+}
 
 #[no_mangle]
 pub extern "system" fn Java_com_kouqurong_sharefilelib_ShareFileLib_startServer(
@@ -14,7 +17,7 @@ pub extern "system" fn Java_com_kouqurong_sharefilelib_ShareFileLib_startServer(
     _class: JClass,
     port: jint,
     path: JObject,
-) -> jboolean {
+) -> jlong {
     let path = JString::from(path);
 
     let path = env.get_string(&path);
@@ -22,44 +25,48 @@ pub extern "system" fn Java_com_kouqurong_sharefilelib_ShareFileLib_startServer(
     if let Ok(path) = path {
         let path = path.to_string_lossy().to_string();
 
-        let handler = start_server(port as u16, path);
+        let share_file_lib = start_server(port as u16, path);
 
-        if let Ok(handler) = handler {
-            unsafe {
-                HANDLER = Some(handler);
-            }
-
-            return JNI_TRUE;
+        if let Ok(share_file_lib) = share_file_lib {
+            return Box::into_raw(Box::new(share_file_lib)) as jlong;
         }
     }
 
-    JNI_FALSE
+    -1
 }
 
 #[no_mangle]
 pub extern "system" fn Java_com_kouqurong_sharefilelib_ShareFileLib_stopServer(
     _env: JNIEnv,
     _class: JClass,
+    ptr: jlong,
 ) {
-    unsafe {
-        if let Some(handler) = HANDLER.take() {
-            let _ = handler.abort();
-        }
+    let share_file_lib = ptr as *mut ShareFileLib;
+
+    if !share_file_lib.is_null() {
+        let share_file_lib = unsafe { Box::from_raw(share_file_lib) };
+
+        let _ = share_file_lib.tx.send(());
     }
 }
 
-static mut ONCE_RT: OnceLock<Option<tokio::runtime::Runtime>> = OnceLock::new();
+static ONCE_RT: OnceLock<Option<tokio::runtime::Runtime>> = OnceLock::new();
 
-fn start_server(port: u16, path: String) -> std::io::Result<JoinHandle<()>> {
-    let rt = unsafe { ONCE_RT.get_or_init(|| tokio::runtime::Runtime::new().ok()) };
+fn start_server(port: u16, path: String) -> std::io::Result<ShareFileLib> {
+    let rt = ONCE_RT.get_or_init(|| tokio::runtime::Runtime::new().ok());
 
     let rt = rt.as_ref().expect("tokio runtime init failed");
+
+    let (tx, rx) = oneshot::channel::<()>();
 
     let handler = rt.spawn(async move {
         println!("port:{} path: {}", port, path);
 
-        let _ = share_file_server::start_server(path, port).await;
+        let _ = share_file_server::start_server(path, port, async {
+            rx.await.expect("failed to install CTRL+C signal handler");
+        })
+        .await;
     });
 
-    Ok(handler)
+    Ok(ShareFileLib { handler, tx })
 }

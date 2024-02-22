@@ -1,2 +1,5 @@
-workspace = { members = [ "share_file_cli", "share_file_jni", "share_file_server"] }
+workspace = { members = [ "share_file_cli", "share_file_jni", "share_file_server"],resolver = "2" }
 
+[profile.release]
+strip = "none"
+opt-level = 3

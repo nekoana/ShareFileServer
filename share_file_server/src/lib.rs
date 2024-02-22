@@ -1,21 +1,31 @@
-use std::path::{Path, PathBuf};
+use std::{
+    future::Future,
+    path::{Path, PathBuf},
+};
 
 use axum::{
-    extract::{OriginalUri, State}, response::{Html, IntoResponse}, routing::get, Router
+    extract::{OriginalUri, State},
+    response::{Html, IntoResponse},
+    routing::get,
+    Router,
 };
 use tokio::net::TcpListener;
 use tower_http::{services::ServeDir, trace::TraceLayer};
 use tracing::debug;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-pub async fn start_server(path: impl AsRef<Path>, port: u16) -> std::io::Result<()> {
-    tracing_subscriber::registry()
+pub async fn start_server(
+    path: impl AsRef<Path>,
+    port: u16,
+    shutdown_signal: impl Future<Output = ()> + Send + 'static,
+) -> std::io::Result<()> {
+    let _ = tracing_subscriber::registry()
         .with(
             tracing_subscriber::EnvFilter::try_from_default_env()
                 .unwrap_or_else(|_| "share_file_server=debug,tower_http=debug".into()),
         )
         .with(tracing_subscriber::fmt::layer())
-        .init();
+        .try_init();
 
     let path = path
         .as_ref()
@@ -34,11 +44,9 @@ pub async fn start_server(path: impl AsRef<Path>, port: u16) -> std::io::Result<
     let listener = TcpListener::bind(format!("0.0.0.0:{}", port)).await?;
 
     axum::serve(listener, app)
-        .with_graceful_shutdown(async {
-            tokio::signal::ctrl_c()
-                .await
-                .expect("failed to install CTRL+C signal handler");
-        })
+        .with_graceful_shutdown(async { 
+            shutdown_signal.await
+         })
         .await?;
 
     Ok(())
