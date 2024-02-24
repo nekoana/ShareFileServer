@@ -1,30 +1,38 @@
+use clap::{Parser};
 use share_file_server::start_server;
-use std::{env, fs};
+use std::{fs};
+
+#[derive(Parser, Debug)]
+struct Config {
+    /// listen port
+    #[arg(long)]
+    port: u16,
+    /// share path
+    #[arg(long)]
+    path: String,
+}
 
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
-    let args = env::args().collect::<Vec<String>>();
+    let args = Config::parse();
 
-    if args.len() < 3 {
-        println!("Usage: {} <port> <path> ", args[0]);
-    } else {
-        let path = args[2].as_str();
+    let path = args.path.as_str();
 
-        let metadata = fs::metadata(path)?;
-        if !metadata.is_dir() {
-            panic!("path is not a directory");
-        }
-
-        let path = std::path::Path::new(path);
-
-        println!("port:{} path: {}", args[1], path.display());
-
-        let port = args[1].parse::<u16>().expect("port must be a number");
-
-        start_server(path, port,async {
-            tokio::signal::ctrl_c().await.expect("failed to install CTRL+C signal handler");
-        }).await?;
+    let metadata = fs::metadata(path)?;
+    if !metadata.is_dir() {
+        panic!("path is not a directory");
     }
+
+    let path = std::path::Path::new(path);
+
+    let port = args.port;
+
+    start_server(path, port, async {
+        tokio::signal::ctrl_c()
+            .await
+            .expect("failed to install CTRL+C signal handler");
+    })
+    .await?;
 
     Ok(())
 }

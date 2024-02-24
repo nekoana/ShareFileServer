@@ -44,9 +44,7 @@ pub async fn start_server(
     let listener = TcpListener::bind(format!("0.0.0.0:{}", port)).await?;
 
     axum::serve(listener, app)
-        .with_graceful_shutdown(async { 
-            shutdown_signal.await
-         })
+        .with_graceful_shutdown(async { shutdown_signal.await })
         .await?;
 
     Ok(())
